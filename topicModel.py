@@ -4,7 +4,6 @@ from time import time
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
 
-
 def print_top_words(model, feature_names, n_top_words):
     for topic_idx, topic in enumerate(model.components_):
         print("Topic #%d:" % topic_idx)
@@ -13,12 +12,13 @@ def print_top_words(model, feature_names, n_top_words):
     print()
 
 
-def fit_LDA(data_samples, n_samples, n_features):
-    n_top_words = 20
-    n_topics = 5
+def fit_LDA(data_samples, n_samples):
+    n_features = 1000
+    n_topics = 10
+    n_top_words = 5
     # Use tf (raw term count) features for LDA.
     print("Extracting tf features for LDA...")
-    tf_vectorizer = CountVectorizer(max_df=0.95, min_df=2,
+    tf_vectorizer = CountVectorizer(max_df=1, min_df=1,
                                     max_features=n_features,
                                     stop_words='english')
 
@@ -64,8 +64,7 @@ def explore_data(file):
         # shuffle data
         subDF = subDF.sample(frac = 1).reset_index(drop=True)
         samples = [x for x in subDF['body']]
-        print samples
-        print z
+        fit_LDA(samples, len(samples))
  
 
 explore_data('sample.json')
