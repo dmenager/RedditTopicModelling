@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from nltk.corpus import stopwords
 from time import time
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
@@ -22,7 +21,8 @@ def fit_LDA(data_samples, n_samples, n_features):
     tf_vectorizer = CountVectorizer(max_df=0.95, min_df=2,
                                     max_features=n_features,
                                     stop_words='english')
-    
+
+    # Pass in a list of strings here
     tf = tf_vectorizer.fit_transform(data_samples)
     print("Fitting LDA models with tf features, "
           "n_samples=%d and n_features=%d..."
@@ -48,28 +48,24 @@ def explore_data(file):
 
     # Remove excess
     data = map(lambda x : x.rstrip(), data)
-
     data_json_str = "[" + ','.join(data) + "]"
 
     # read in pandas
     data = pd.read_json(data_json_str)
 
-    # shuffle data
-    data = data.sample(frac = 1).reset_index(drop=True)
-
-    # Lead the stop words in to a local variable
-    stop_words = stopwords.words('english')
-
-    # Removes the stop words, but treats them as individual characters, instead of a full string.
-    # Will continue looking at in the morning.
-    for word in stop_words: data['body'] = data['body'].str.replace(word, "")
-    print(data['body'])
-
-    # This splits data['body'] in to rows of characters. Not sure that's what you were trying to do.
-    # print(data['body'].apply(lambda comment: [word for word in str(comment.encode('utf-8')) if word not in stop_words]))
-
-    # print(data['body'])
-    # print(data.describe())
-
+    # set the index to be this and don't drop
+    data.set_index(keys=['subreddit'], drop=False,inplace=True)
+    # get a list of names
+    subreddits=data['subreddit'].unique().tolist()
+    first_subreddit=data.loc[data.subreddit==subreddits[0]]
+    for idx, subredditName in enumerate(subreddits):
+        subDF = data.loc[data.subreddit==subreddits[idx]]
+        #print subDF
+        # shuffle data
+        subDF = subDF.sample(frac = 1).reset_index(drop=True)
+        samples = [x for x in subDF['body']]
+        print samples
+        print z
+ 
 
 explore_data('sample.json')
