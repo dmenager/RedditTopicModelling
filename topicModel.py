@@ -12,21 +12,25 @@ def print_top_words(model, feature_names, n_top_words):
     print()
 
 
-def fit_LDA(data_samples, n_samples):
+def fit_LDA(data_samples, n_samples, topics, name):
     n_features = 1000
-    n_topics = 10
-    n_top_words = 5
+    n_topics = topics
+    n_top_words = 10
     # Use tf (raw term count) features for LDA.
+    print("n_samples=%d" %(n_samples))
     print("Extracting tf features for LDA...")
-    tf_vectorizer = CountVectorizer(max_df=1, min_df=1,
-                                    max_features=n_features,
+    tf_vectorizer = CountVectorizer(max_df=.9, min_df=1,
+                                    max_features=None,
                                     stop_words='english')
 
+    #tf_vectorizer = CountVectorizer(max_df=.3, min_df=1,
+    #                                max_features=None,
+    #                                stop_words='english')
     # Pass in a list of strings here
     tf = tf_vectorizer.fit_transform(data_samples)
     print("Fitting LDA models with tf features, "
-          "n_samples=%d and n_features=%d..."
-          % (n_samples, n_features))
+          "n_samples=%d, subreddit_name=%s, n_features=%d..."
+          % (n_samples, name, n_features))
     lda = LatentDirichletAllocation(n_topics=n_topics, max_iter=5,
                                     learning_method='online',
                                     learning_offset=50.,
@@ -36,7 +40,6 @@ def fit_LDA(data_samples, n_samples):
     print("\nTopics in LDA model:")
     tf_feature_names = tf_vectorizer.get_feature_names()
     print_top_words(lda, tf_feature_names, n_top_words)
-
 
 def explore_data(file):
     data = None
@@ -52,19 +55,24 @@ def explore_data(file):
 
     # read in pandas
     data = pd.read_json(data_json_str)
-
+    
     # set the index to be this and don't drop
     data.set_index(keys=['subreddit'], drop=False,inplace=True)
     # get a list of names
     subreddits=data['subreddit'].unique().tolist()
-    first_subreddit=data.loc[data.subreddit==subreddits[0]]
+
+    #samples = [x for x in data['body']]
+    #fit_LDA(samples, len(samples), len(subreddits))
+    
     for idx, subredditName in enumerate(subreddits):
         subDF = data.loc[data.subreddit==subreddits[idx]]
         #print subDF
         # shuffle data
         subDF = subDF.sample(frac = 1).reset_index(drop=True)
         samples = [x for x in subDF['body']]
-        fit_LDA(samples, len(samples))
+        if len(samples) > 1:
+            fit_LDA(samples, len(samples), 1, subredditName)
  
+    
 
 explore_data('sample.json')
