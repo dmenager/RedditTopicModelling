@@ -29,11 +29,20 @@ def fit_LDA(data_samples, n_samples, topics, name):
 
     # Pass in a list of strings here
     tf = tf_vectorizer.fit_transform(data_samples)
-    tfTrain = None
-    tfHold = None
+    mask = np.random.rand(len(tf_vectorizer.vocabulary_)) < 0.8
+    print mask
+    print "Orig:"
+    print tf
+    tfTrain = tf[0,mask]
+    tfHold = tf[0,~mask]
+    print
+    print tfTrain
+    print
+    print tfHold
+    print a
     print("Training LDA model with tf features, "
           "n_samples=%d, subreddit_name=%s, n_features=%d..."
-          % (n_train_samples, name, n_features))
+          % (n_samples, name, n_features))
     lda = LatentDirichletAllocation(n_topics=n_topics, max_iter=10,
                                     learning_method='online',
                                     learning_offset=50.,
@@ -74,32 +83,24 @@ def explore_data(file):
         shuffled = data.iloc[np.random.permutation(len(data))]
         shuffled.reset_index(drop=True)
         # Make training and holdout
-        msk = np.random.rand(len(shuffled)) < 0.7
-        train = shuffled[msk]
-        hold = shuffled[~msk]
-        if (train.empty == False):
-            datas.append((train, hold))
+        if (shuffled.empty == False):
+            datas.append(shuffled)
     
     res = list(set(subreddits[0]).intersection(*subreddits))
     subreddits = res
     #print subreddits
     #print a
     for data in datas:
-        train = data[0].query('@subreddits in subreddit')
-        hold = data[1].query('@subreddits in subreddit')
+        data = data.query('@subreddits in subreddit')
         for idx, subredditName in enumerate(subreddits):
-            subDFTrain = train.loc[train.subreddit == subreddits[idx]]
-            subDFHold = hold.loc[hold.subreddit == subreddits[idx]]
+            subDF = data.loc[data.subreddit == subreddits[idx]]
             #print subDF
-            # shuffle data
-            if (subDFTrain.empty == False and subDFHold.empty == False):
+            if (subDF.empty == False):
                 #print subDF
-                subDFTrain = subDFTrain.sample(frac=1).reset_index(drop=True)
-                subDFHold = subDFHold.sample(frac=1).reset_index(drop=True)
-                samplesTrain = [x for x in subDFTrain['body']]
-                samplesHold = [x for x in subDFHold['body']]
-                if len(samplesTrain) >= 1:
-                    fit_LDA(samplesTrain, samplesHold, len(samplesTrain), len(samplesHold), 1, subredditName,)
+                subDF = subDF.sample(frac=1).reset_index(drop=True)
+                samples = [x for x in subDF['body']]
+                if len(samples) >= 1:
+                    fit_LDA(samples, len(samples), 1, subredditName,)
         print "------------------------------------------------------"
         print
         print "------------------------------------------------------"
