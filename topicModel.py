@@ -19,32 +19,31 @@ def fit_LDA(data_samples, n_samples, topics, name):
     n_features = 1000
     n_topics = topics
     n_top_words = 10
-    stop = stopwords.words('english')#.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu'])
+    stop = stopwords.words('english')
     stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href'])
-    #print stop
-    #print a
     # Use tf (raw term count) features for LDA.
-    print("n_samples=%d" % (n_samples))
     print("Extracting tf features for LDA...")
     tf_vectorizer = CountVectorizer(max_df=5, min_df=1,
                                     max_features=None,
                                     stop_words=set(stop))
 
-    # tf_vectorizer = CountVectorizer(max_df=.3, min_df=1,
-    #                                max_features=None,
-    #                                stop_words='english')
     # Pass in a list of strings here
     tf = tf_vectorizer.fit_transform(data_samples)
-    print("Fitting LDA models with tf features, "
+    tfTrain = None
+    tfHold = None
+    print("Training LDA model with tf features, "
           "n_samples=%d, subreddit_name=%s, n_features=%d..."
-          % (n_samples, name, n_features))
-    lda = LatentDirichletAllocation(n_topics=n_topics, max_iter=5,
+          % (n_train_samples, name, n_features))
+    lda = LatentDirichletAllocation(n_topics=n_topics, max_iter=10,
                                     learning_method='online',
                                     learning_offset=50.,
                                     random_state=0)
-    lda.fit(tf)
-
-    print("\nTopics in LDA model:")
+    lda.fit(tfTrain)
+    score = lda.score(tfHold)
+    perp = lda.perplexity(tfHold)
+    print "Log Likihood: " + str(perp)
+    print "Score: " + str(score)
+    print("Topics in LDA model:")
     tf_feature_names = tf_vectorizer.get_feature_names()
     print_top_words(name, lda, tf_feature_names, n_top_words)
 
@@ -71,25 +70,36 @@ def explore_data(file):
             
         subreddits.append(data['subreddit'].unique().tolist())
 
-        if (data.empty == False):
-            datas.append(data)
+        # Shuffle the data
+        shuffled = data.iloc[np.random.permutation(len(data))]
+        shuffled.reset_index(drop=True)
+        # Make training and holdout
+        msk = np.random.rand(len(shuffled)) < 0.7
+        train = shuffled[msk]
+        hold = shuffled[~msk]
+        if (train.empty == False):
+            datas.append((train, hold))
     
     res = list(set(subreddits[0]).intersection(*subreddits))
     subreddits = res
     #print subreddits
     #print a
     for data in datas:
-        data = data.query('@subreddits in subreddit')
+        train = data[0].query('@subreddits in subreddit')
+        hold = data[1].query('@subreddits in subreddit')
         for idx, subredditName in enumerate(subreddits):
-            subDF = data.loc[data.subreddit == subreddits[idx]]
+            subDFTrain = train.loc[train.subreddit == subreddits[idx]]
+            subDFHold = hold.loc[hold.subreddit == subreddits[idx]]
             #print subDF
             # shuffle data
-            if (subDF.empty == False):
+            if (subDFTrain.empty == False and subDFHold.empty == False):
                 #print subDF
-                subDF = subDF.sample(frac=1).reset_index(drop=True)
-                samples = [x for x in subDF['body']]
-                if len(samples) >= 1:
-                    fit_LDA(samples, len(samples), 1, subredditName)
+                subDFTrain = subDFTrain.sample(frac=1).reset_index(drop=True)
+                subDFHold = subDFHold.sample(frac=1).reset_index(drop=True)
+                samplesTrain = [x for x in subDFTrain['body']]
+                samplesHold = [x for x in subDFHold['body']]
+                if len(samplesTrain) >= 1:
+                    fit_LDA(samplesTrain, samplesHold, len(samplesTrain), len(samplesHold), 1, subredditName,)
         print "------------------------------------------------------"
         print
         print "------------------------------------------------------"
