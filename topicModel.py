@@ -14,7 +14,18 @@ def print_top_words(sub_name, model, feature_names, n_top_words):
         print(results[sub_name])
     print()
 
+def preProcess(data):
+    n_features = 1000
+    n_top_words = 10
+    stop = stopwords.words('english')
+    stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href'])
+    tf_vectorizer = CountVectorizer(max_df=5, min_df=1,
+                                    max_features=None,
+                                    stop_words=set(stop))
 
+    # Pass in a list of strings here
+    return tf_vectorizer.fit_transform(data)
+    
 def fit_LDA(data_samples, n_samples, topics, name):
     n_features = 1000
     n_topics = topics
@@ -29,17 +40,7 @@ def fit_LDA(data_samples, n_samples, topics, name):
 
     # Pass in a list of strings here
     tf = tf_vectorizer.fit_transform(data_samples)
-    mask = np.random.rand(len(tf_vectorizer.vocabulary_)) < 0.8
-    print mask
-    print "Orig:"
-    print tf
-    tfTrain = tf[0,mask]
-    tfHold = tf[0,~mask]
-    print
-    print tfTrain
-    print
-    print tfHold
-    print a
+    
     print("Training LDA model with tf features, "
           "n_samples=%d, subreddit_name=%s, n_features=%d..."
           % (n_samples, name, n_features))
@@ -47,18 +48,16 @@ def fit_LDA(data_samples, n_samples, topics, name):
                                     learning_method='online',
                                     learning_offset=50.,
                                     random_state=0)
-    lda.fit(tfTrain)
-    score = lda.score(tfHold)
-    perp = lda.perplexity(tfHold)
-    print "Log Likihood: " + str(perp)
-    print "Score: " + str(score)
+    lda.fit(tf)
     print("Topics in LDA model:")
     tf_feature_names = tf_vectorizer.get_feature_names()
     print_top_words(name, lda, tf_feature_names, n_top_words)
+    return lda
 
 def explore_data(file):
     files = ['2010.json', '2011.json']
     datas = []
+    preprocessed = []
     subreddits = []
     for file in files:
         # Format json data to be read by pandas
@@ -73,7 +72,6 @@ def explore_data(file):
 
         # read in pandas
         data = pd.read_json(data_json_str)
-
         # set the index to be this and don't drop
         data.set_index(keys=['subreddit'], drop=False, inplace=True)
             
@@ -85,12 +83,44 @@ def explore_data(file):
         # Make training and holdout
         if (shuffled.empty == False):
             datas.append(shuffled)
+
     
     res = list(set(subreddits[0]).intersection(*subreddits))
     subreddits = res
-    #print subreddits
-    #print a
     for data in datas:
+        data = data.query('@subreddits in subreddit')
+        for subredditName in subreddits:
+            subDF = data.loc[data.subreddit == subredditName]
+            samples = [x for x in subDF['body']]
+            d = preProcess(samples)
+            print d
+            print
+        print a
+
+    mask = np.random.rand(data.shape[0]) < 0.7
+    Train = data[mask]
+    Hold = data[~mask]
+    print mask
+    print Train.shape
+    print Hold.shape
+    print a
+
+    for data in Train:
+        data = data.query('@subreddits in subreddit')
+        for idx, subredditName in enumerate(subreddits):
+            subDF = data.loc[data.subreddit == subreddits[idx]]
+            #print subDF
+            if (subDF.empty == False):
+                #print subDF
+                subDF = subDF.sample(frac=1).reset_index(drop=True)
+                samples = [x for x in subDF['body']]
+                if len(samples) >= 1:
+                    fit_LDA(samples, len(samples), 1, subredditName,)
+        print "------------------------------------------------------"
+        print
+        print "------------------------------------------------------"
+
+    for data in Hold:
         data = data.query('@subreddits in subreddit')
         for idx, subredditName in enumerate(subreddits):
             subDF = data.loc[data.subreddit == subreddits[idx]]
