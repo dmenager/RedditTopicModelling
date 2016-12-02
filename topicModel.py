@@ -14,7 +14,7 @@ def print_top_words(sub_name, model, feature_names, n_top_words):
         print(results[sub_name])
     print()
 
-def preProcess(data):
+def preProcess(data):    
     n_features = 1000
     n_top_words = 10
     stop = stopwords.words('english')
@@ -24,33 +24,20 @@ def preProcess(data):
                                     stop_words=set(stop))
 
     # Pass in a list of strings here
-    return tf_vectorizer.fit_transform(data)
+    return (tf_vectorizer.fit_transform(data), tf_vectorizer.get_feature_names())
     
-def fit_LDA(data_samples, n_samples, topics, name):
-    n_features = 1000
+def fit_LDA(tf, tf_feature_names, n_samples, topics, name):
     n_topics = topics
     n_top_words = 10
-    stop = stopwords.words('english')
-    stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href'])
-    # Use tf (raw term count) features for LDA.
-    print("Extracting tf features for LDA...")
-    tf_vectorizer = CountVectorizer(max_df=5, min_df=1,
-                                    max_features=None,
-                                    stop_words=set(stop))
-
-    # Pass in a list of strings here
-    tf = tf_vectorizer.fit_transform(data_samples)
-    
     print("Training LDA model with tf features, "
           "n_samples=%d, subreddit_name=%s, n_features=%d..."
-          % (n_samples, name, n_features))
+          % (n_samples, name, 1000))
     lda = LatentDirichletAllocation(n_topics=n_topics, max_iter=10,
                                     learning_method='online',
                                     learning_offset=50.,
                                     random_state=0)
     lda.fit(tf)
-    print("Topics in LDA model:")
-    tf_feature_names = tf_vectorizer.get_feature_names()
+    print("Topics in LDA model:")    
     print_top_words(name, lda, tf_feature_names, n_top_words)
     return lda
 
@@ -87,50 +74,38 @@ def explore_data(file):
     
     res = list(set(subreddits[0]).intersection(*subreddits))
     subreddits = res
+    
+    print("Extracting tf features for LDA...")
     for data in datas:
         data = data.query('@subreddits in subreddit')
         for subredditName in subreddits:
             subDF = data.loc[data.subreddit == subredditName]
-            samples = [x for x in subDF['body']]
-            d = preProcess(samples)
-            print d
-            print
-        print a
-
-    mask = np.random.rand(data.shape[0]) < 0.7
-    Train = data[mask]
-    Hold = data[~mask]
-    print mask
-    print Train.shape
-    print Hold.shape
-    print a
-
-    for data in Train:
-        data = data.query('@subreddits in subreddit')
-        for idx, subredditName in enumerate(subreddits):
-            subDF = data.loc[data.subreddit == subreddits[idx]]
-            #print subDF
-            if (subDF.empty == False):
-                #print subDF
-                subDF = subDF.sample(frac=1).reset_index(drop=True)
+            if(subDF.empty != True):
                 samples = [x for x in subDF['body']]
-                if len(samples) >= 1:
-                    fit_LDA(samples, len(samples), 1, subredditName,)
+                (d, vectorizer) = preProcess(samples)
+                preprocessed.append((d, vectorizer, subredditName))
+
+    mask = np.random.rand(len(preprocessed)) < 0.7
+    split = int(round(.7 * len(preprocessed)))
+    Train = preprocessed[:split]
+    Hold = preprocessed[split:]
+    #print split
+    #print len(Train)
+    #print len(Hold)
+    #print a
+    models = {}
+    for (tf, vectorizer, subredditName) in Train:
+        model = fit_LDA(tf, vectorizer, tf.shape[1], 1, subredditName,)
+        models[subredditName] =  model
         print "------------------------------------------------------"
         print
         print "------------------------------------------------------"
 
-    for data in Hold:
-        data = data.query('@subreddits in subreddit')
-        for idx, subredditName in enumerate(subreddits):
-            subDF = data.loc[data.subreddit == subreddits[idx]]
-            #print subDF
-            if (subDF.empty == False):
-                #print subDF
-                subDF = subDF.sample(frac=1).reset_index(drop=True)
-                samples = [x for x in subDF['body']]
-                if len(samples) >= 1:
-                    fit_LDA(samples, len(samples), 1, subredditName,)
+    for (tf, vectorizer, subredditName) in Hold:
+        print tf
+        correspondingModel = models[subredditName]
+        print subredditName
+        print correspondingModel.perplexity(tf)
         print "------------------------------------------------------"
         print
         print "------------------------------------------------------"
