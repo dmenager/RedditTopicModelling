@@ -24,7 +24,7 @@ def preProcess(data):
                                     stop_words=set(stop))
 
     # Pass in a list of strings here
-    return (tf_vectorizer.fit_transform(data), tf_vectorizer.get_feature_names())
+    return (tf_vectorizer.fit_transform(data).tocsr(), tf_vectorizer.get_feature_names())
     
 def fit_LDA(tf, tf_feature_names, n_samples, topics, name):
     n_topics = topics
@@ -76,39 +76,29 @@ def explore_data(file):
     subreddits = res
     
     print("Extracting tf features for LDA...")
+    yearModels = []
     for data in datas:
+        models = {}
         data = data.query('@subreddits in subreddit')
         for subredditName in subreddits:
             subDF = data.loc[data.subreddit == subredditName]
             if(subDF.empty != True):
                 samples = [x for x in subDF['body']]
-                (d, vectorizer) = preProcess(samples)
-                preprocessed.append((d, vectorizer, subredditName))
-
-    mask = np.random.rand(len(preprocessed)) < 0.7
-    split = int(round(.7 * len(preprocessed)))
-    Train = preprocessed[:split]
-    Hold = preprocessed[split:]
-    #print split
-    #print len(Train)
-    #print len(Hold)
-    #print a
-    models = {}
-    for (tf, vectorizer, subredditName) in Train:
-        model = fit_LDA(tf, vectorizer, tf.shape[1], 1, subredditName,)
-        models[subredditName] =  model
-        print "------------------------------------------------------"
-        print
-        print "------------------------------------------------------"
-
-    for (tf, vectorizer, subredditName) in Hold:
-        print tf
-        correspondingModel = models[subredditName]
-        print subredditName
-        print correspondingModel.perplexity(tf)
-        print "------------------------------------------------------"
-        print
-        print "------------------------------------------------------"
+                (termMatrix, vectorizer) = preProcess(samples)
+                
+                # minus 1 because we want to use this as index
+                rowsIndex = termMatrix.shape[0] - 1
+                split = int(round(.7 * rowsIndex))
+                Train = termMatrix[:split]
+                Hold = termMatrix[split +1:]
+                if Train.shape[0] == 0 or Hold.shape[0] == 0:
+                    continue
+                model = fit_LDA(Train, vectorizer, termMatrix.shape[1], 1, subredditName)
+                models[subredditName] = model
+                print model.perplexity(Hold)
+                print
+                preprocessed.append((termMatrix, vectorizer, subredditName))
+        print "-----------------------------------------------"
 
 results = {}
 explore_data('2016-08-15000.json')
