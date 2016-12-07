@@ -46,17 +46,17 @@ def print_top_words(sub_name, model, feature_names, n_top_words):
 
 def preProcess(data):
     stop = stopwords.words('english')
-    stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href', 'deleted', 'just', 'like', 'im', 'dont', 'wa', 'u', 'ha', 'get', 'would', 'thats', 'thing', 'even'])
+    stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href', 'deleted', 'just', 'like', 'im', 'dont', 'wa', 'u', 'ha', 'get', 'would', 'thats', 'thing', 'even', 'one', 'well', 'see', 'got', 'could', 'should', 'also', 'go', 'make', 'sure'])
 
     tf_vectorizer = TfidfVectorizer(tokenizer=tokenize,
                                     max_df=.9, min_df=1,
                                     #stop_words='english',
                                     stop_words=set(stop),
                                     binary=False,
-                                    norm = 'l2',
+                                    norm = None,
                                     use_idf=True,
                                     sublinear_tf=False,
-                                    max_features=25)
+                                    max_features=10)
     
     # Pass in a list of strings here
     term_matrix = tf_vectorizer.fit_transform(data).tocsr()
@@ -67,11 +67,9 @@ def preProcess(data):
 
 def preProcessBaseline(data):
     stop = stopwords.words('english')
-    stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href'])
-    tf_vectorizer = CountVectorizer(max_df=5, min_df=1,
+    tf_vectorizer = CountVectorizer(max_df=1, min_df=1,
                                     max_features=None,
-                                    stop_words=set(stop))
-
+                                    stop_words='english')
     # Pass in a list of strings here
     return (tf_vectorizer.fit_transform(data).tocsr(), tf_vectorizer.get_feature_names())
     
@@ -92,7 +90,7 @@ def fit_LDA(tf, tf_feature_names, n_samples, n_features, topics, name):
 
 def explore_data(file):
     #files = ['funny.json', '24hoursupport.json', 'todayilearned.json', 'politics', 'uspolitics.json']
-    files = ['funny.json']
+    files = ['politics.json']
     datas = []
     preprocessed = []
     subreddits = []
