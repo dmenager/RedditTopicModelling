@@ -1,10 +1,40 @@
 import pandas as pd
 import numpy as np
+import string
+
 from time import time
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.decomposition import LatentDirichletAllocation
+from sklearn.decomposition import LatentDirichletAllocation, TruncatedSVD
+from sklearn.random_projection import SparseRandomProjection
+from sklearn.random_projection import johnson_lindenstrauss_min_dim
+from sklearn.preprocessing import MaxAbsScaler, MinMaxScaler, scale
+from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.corpus import stopwords
+from nltk import word_tokenize          
+from nltk.stem.porter import PorterStemmer
+from scipy.sparse import csr_matrix
 
+stemmer = PorterStemmer()
+def stem_tokens(tokens, stemmer):
+    stemmed = []
+    for item in tokens:
+        stemmed.append(stemmer.stem(item))
+    return stemmed
+
+lemmatizer = WordNetLemmatizer()
+def lemmatize_tokens(tokens, lemmatizer):
+    lemma = []
+    for item in tokens:
+        lemma.append(lemmatizer.lemmatize(item))
+    return lemma
+    
+def tokenize(text):
+    text = "".join([ch for ch in text.lower() if ch not in string.punctuation])
+    tokens = word_tokenize(text)
+    lemmas = lemmatize_tokens(tokens, lemmatizer)
+    return lemmas
+    #stems = stem_tokens(tokens, stemmer)
+    #return stems
 
 def print_top_words(sub_name, model, feature_names, n_top_words):
     for topic_idx, topic in enumerate(model.components_):
@@ -14,9 +44,28 @@ def print_top_words(sub_name, model, feature_names, n_top_words):
         print(results[sub_name])
     print()
 
-def preProcess(data):    
-    n_features = 1000
-    n_top_words = 10
+def preProcess(data):
+    stop = stopwords.words('english')
+    stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href', 'deleted', 'just', 'like', 'im', 'dont', 'wa', 'u', 'ha', 'get', 'would', 'thats', 'thing', 'even'])
+
+    tf_vectorizer = TfidfVectorizer(tokenizer=tokenize,
+                                    max_df=.9, min_df=1,
+                                    #stop_words='english',
+                                    stop_words=set(stop),
+                                    binary=False,
+                                    norm = 'l2',
+                                    use_idf=True,
+                                    sublinear_tf=False,
+                                    max_features=25)
+    
+    # Pass in a list of strings here
+    term_matrix = tf_vectorizer.fit_transform(data).tocsr()
+    term_matrix = scale(term_matrix, with_mean=False, with_std=False, axis=0, copy=False)
+    #term_matrix = MaxAbsScaler((0,1)).fit_transform(term_matrix)
+    print term_matrix
+    return (term_matrix, tf_vectorizer.get_feature_names())
+
+def preProcessBaseline(data):
     stop = stopwords.words('english')
     stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href'])
     tf_vectorizer = CountVectorizer(max_df=5, min_df=1,
@@ -26,12 +75,12 @@ def preProcess(data):
     # Pass in a list of strings here
     return (tf_vectorizer.fit_transform(data).tocsr(), tf_vectorizer.get_feature_names())
     
-def fit_LDA(tf, tf_feature_names, n_samples, topics, name):
+def fit_LDA(tf, tf_feature_names, n_samples, n_features, topics, name):
     n_topics = topics
     n_top_words = 10
     print("Training LDA model with tf features, "
           "n_samples=%d, subreddit_name=%s, n_features=%d..."
-          % (n_samples, name, 1000))
+          % (n_samples, name, n_features))
     lda = LatentDirichletAllocation(n_topics=n_topics, max_iter=10,
                                     learning_method='online',
                                     learning_offset=50.,
@@ -42,7 +91,8 @@ def fit_LDA(tf, tf_feature_names, n_samples, topics, name):
     return lda
 
 def explore_data(file):
-    files = ['2010.json', '2011.json']
+    #files = ['funny.json', '24hoursupport.json', 'todayilearned.json', 'politics', 'uspolitics.json']
+    files = ['funny.json']
     datas = []
     preprocessed = []
     subreddits = []
@@ -85,7 +135,6 @@ def explore_data(file):
             if(subDF.empty != True):
                 samples = [x for x in subDF['body']]
                 (termMatrix, vectorizer) = preProcess(samples)
-                
                 # minus 1 because we want to use this as index
                 rowsIndex = termMatrix.shape[0] - 1
                 split = int(round(.7 * rowsIndex))
@@ -93,7 +142,7 @@ def explore_data(file):
                 Hold = termMatrix[split +1:]
                 if Train.shape[0] == 0 or Hold.shape[0] == 0:
                     continue
-                model = fit_LDA(Train, vectorizer, termMatrix.shape[1], 1, subredditName)
+                model = fit_LDA(Train, vectorizer, termMatrix.shape[0], termMatrix.shape[1], 1, subredditName)
                 models[subredditName] = model
                 print model.perplexity(Hold)
                 print
