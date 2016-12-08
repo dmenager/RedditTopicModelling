@@ -15,8 +15,34 @@ from nltk import word_tokenize
 from nltk.stem.porter import PorterStemmer
 from scipy.sparse import csr_matrix, vstack
 
-
-def plotPerplexities(m1, m2):
+def print_top_words(sub_name, model, feature_names, n_top_words):
+    for topic_idx, topic in enumerate(model.components_):
+        print("Topic #%d:" % topic_idx)
+        results[sub_name] = " ".join([feature_names[i]
+                        for i in topic.argsort()[:-n_top_words - 1:-1]])
+        print(results[sub_name])
+    print()
+    
+def plotWordDistribution(model, feature_names, n_top_words, layout, subreddit,  ax):
+    #rows = layout[0]
+    #cols = layout[1]
+    #place = layout[2]
+    #plt.title("Topic Word Distribution for %s" % subreddit, fontsize=20)
+    for topic_idx, topic in enumerate(model.components_):
+        #ax =plt.add_subplot(rows,cols,place)
+        ax.set_xlabel("Words", fontsize=20)
+        ax.set_ylabel("Probability", fontsize=20)
+        #plt.title("Topic #%d:" % topic_idx, fontsize=20)
+        probs = topic.argsort()[:-n_top_words - 1:-1]
+        keys = [feature_names[i] for i in probs]
+        keymaps = np.arange(len(keys))
+        ps = [topic[i]/topic.sum() for i in topic.argsort()[:-n_top_words - 1:-1]]
+        ax.bar(keymaps, ps, align='center')
+        #ax.set_yticks(size='large')
+        ax.set_xticks(keymaps)
+        ax.set_xticklabels(keys)
+    return plt
+def plotPerplexities(m1, m2, plts):
     xaxis = np.arange(len(m1.keys()))
     y_base_m = []
     y_base_d = []
@@ -30,7 +56,8 @@ def plotPerplexities(m1, m2):
         y_prop_m.append(res[0])
         y_prop_d.append(res[1])
 
-    plt.figure(1)
+    fig = plt.figure()
+    fig.canvas.set_window_title('Model Perplexities')
     plt.subplot(2,1,1)
     plt.errorbar(xaxis, y_base_m, y_base_d)
     plt.title("Average Perplexity Score for Baseline", fontsize=35)
@@ -46,7 +73,7 @@ def plotPerplexities(m1, m2):
     plt.ylabel("Perplexity", fontsize=20)
     plt.yticks(fontsize=20)
     plt.xticks(xaxis, m2.keys(), fontsize=20)
-    plt.show()
+    plts.append(plt)
     
 stemmer = PorterStemmer()
 def stem_tokens(tokens, stemmer):
@@ -70,15 +97,7 @@ def tokenize(text):
     #stems = stem_tokens(tokens, stemmer)
     #return stems
 
-def print_top_words(sub_name, model, feature_names, n_top_words):
-    for topic_idx, topic in enumerate(model.components_):
-        print("Topic #%d:" % topic_idx)
-        results[sub_name] = " ".join([feature_names[i]
-                        for i in topic.argsort()[:-n_top_words - 1:-1]])
-        print(results[sub_name])
-    print()
-
-def crossValidate(folds, terms, vocabulary, subredditName, avgPerplexities):
+def crossValidate(folds, terms, vocabulary, subredditName, avgPerplexities, flag, plts):
     print "Performing",
     print folds,
     print "fold cross validation."
@@ -89,9 +108,38 @@ def crossValidate(folds, terms, vocabulary, subredditName, avgPerplexities):
     print n
     termsList = [terms[i:i + n] for i in range(0, terms.shape[0], n)]
     terms = csr_matrix(terms)
+    layout = [5,2,1]
+    fig = plt.figure()
+    
+    if flag == 0:
+        fig.canvas.set_window_title('Word Distributions for %s on baseline' % subredditName)
+    elif flag == 1:
+        fig.canvas.set_window_title('Word Distributions for %s on proposed' % subredditName)
+
     for i, Hold in enumerate(termsList):
         if i == 10:
             continue
+        ax = None
+        if i == 0:
+            ax = plt.subplot(5,2,1)
+        elif i == 1:
+            ax = plt.subplot(5,2,2)
+        elif i == 2:
+            ax = plt.subplot(5,2,3)
+        elif i == 3:
+            ax = plt.subplot(5,2,4)
+        elif i == 4:
+            ax = plt.subplot(5,2,5)
+        elif i == 5:
+            ax = plt.subplot(5,2,6)
+        elif i == 6:
+            ax = plt.subplot(5,2,7)
+        elif i == 7:
+            ax = plt.subplot(5,2,8)
+        elif i == 8:
+            ax = plt.subplot(5,2,9)
+        elif i == 9:
+            ax = plt.subplot(5,2,10)
         Hold = csr_matrix(Hold)
         print "Fold: ",
         print i
@@ -102,10 +150,13 @@ def crossValidate(folds, terms, vocabulary, subredditName, avgPerplexities):
         if Train.shape[0] == 0 or Hold.shape[0] == 0:
             return 1
         model = fit_LDA(Train, vocabulary, Train.shape[0], Train.shape[1], 1, subredditName)
+        plotWordDistribution(model, vocabulary, 10, layout, subredditName, ax)
         #models[subredditName] = model
         perplexities.append(model.perplexity(Hold))
         print model.perplexity(Hold)
         print
+        layout[2] = layout[2] + 1
+    plts.append(plt)
     avgPerplexities[subredditName] = (np.mean(perplexities), np.std(perplexities))
 
 def preProcess(data):
@@ -183,6 +234,7 @@ def explore_data(file):
     baselineAvgModelPerplexities = {}
     proposedAvgModelPerplexities = {}
     yearModels = []
+    plts = []
     for data in datas:
         print("Extracting proposed tf features for LDA...")
         models = {}
@@ -192,7 +244,7 @@ def explore_data(file):
             if(subDF.empty != True):
                 samples = [x for x in subDF['body']]
                 (termMatrix, vocabulary) = preProcess(samples)
-                crossValidate(10, termMatrix, vocabulary, subredditName, proposedAvgModelPerplexities)
+                crossValidate(10, termMatrix, vocabulary, subredditName, proposedAvgModelPerplexities, 1, plts)
         print "-----------------------------------------------"
 
     for data in datas:
@@ -204,9 +256,14 @@ def explore_data(file):
             if(subDF.empty != True):
                 samples = [x for x in subDF['body']]
                 (termMatrix, vocabulary) = preProcessBaseline(samples)
-                crossValidate(10, termMatrix, vocabulary, subredditName, baselineAvgModelPerplexities)
+                crossValidate(10, termMatrix, vocabulary, subredditName, baselineAvgModelPerplexities, 0, plts)
         print "-----------------------------------------------"
-    plotPerplexities(baselineAvgModelPerplexities, proposedAvgModelPerplexities)
+    plotPerplexities(baselineAvgModelPerplexities, proposedAvgModelPerplexities, plts)
+
+    for i, plt in enumerate(plts):
+        print i 
+        plt.show()
+    plt.show()
 
 results = {}
 explore_data('2016-08-15000.json')
