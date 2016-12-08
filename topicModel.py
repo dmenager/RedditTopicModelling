@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import string
+import matplotlib.pyplot as plt
 
 from time import time
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
@@ -12,8 +13,41 @@ from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.corpus import stopwords
 from nltk import word_tokenize          
 from nltk.stem.porter import PorterStemmer
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, vstack
 
+
+def plotPerplexities(m1, m2):
+    xaxis = np.arange(len(m1.keys()))
+    y_base_m = []
+    y_base_d = []
+    for subreddit, res in m1.iteritems():
+        y_base_m.append(res[0])
+        y_base_d.append(res[1])
+
+    y_prop_m = []
+    y_prop_d = []
+    for subreddit, res in m2.iteritems():
+        y_prop_m.append(res[0])
+        y_prop_d.append(res[1])
+
+    plt.figure(1)
+    plt.subplot(2,1,1)
+    plt.errorbar(xaxis, y_base_m, y_base_d)
+    plt.title("Average Perplexity Score for Baseline", fontsize=35)
+    plt.xlabel("Subreddits", fontsize=20)
+    plt.ylabel("Perplexity", fontsize=20)
+    plt.yticks(fontsize=20)
+    plt.xticks(xaxis, m1.keys(), fontsize=20)
+
+    plt.subplot(2,1,2)
+    plt.errorbar(xaxis,y_prop_m, y_prop_d)
+    plt.title("Average Perplexity Score for Tuned Model", fontsize=35)
+    plt.xlabel("Subreddits", fontsize=20)
+    plt.ylabel("Perplexity", fontsize=20)
+    plt.yticks(fontsize=20)
+    plt.xticks(xaxis, m2.keys(), fontsize=20)
+    plt.show()
+    
 stemmer = PorterStemmer()
 def stem_tokens(tokens, stemmer):
     stemmed = []
@@ -44,13 +78,42 @@ def print_top_words(sub_name, model, feature_names, n_top_words):
         print(results[sub_name])
     print()
 
+def crossValidate(folds, terms, vocabulary, subredditName, avgPerplexities):
+    print "Performing",
+    print folds,
+    print "fold cross validation."
+    perplexities = []
+    terms = terms.todense()
+    n = terms.shape[0]/folds
+    print "n =",
+    print n
+    termsList = [terms[i:i + n] for i in range(0, terms.shape[0], n)]
+    terms = csr_matrix(terms)
+    for i, Hold in enumerate(termsList):
+        if i == 10:
+            continue
+        Hold = csr_matrix(Hold)
+        print "Fold: ",
+        print i
+        Train = csr_matrix((0, terms.shape[1]))
+        for j, train in enumerate(termsList):
+            if i != j:
+                Train = vstack([Train, csr_matrix(train)])
+        if Train.shape[0] == 0 or Hold.shape[0] == 0:
+            return 1
+        model = fit_LDA(Train, vocabulary, Train.shape[0], Train.shape[1], 1, subredditName)
+        #models[subredditName] = model
+        perplexities.append(model.perplexity(Hold))
+        print model.perplexity(Hold)
+        print
+    avgPerplexities[subredditName] = (np.mean(perplexities), np.std(perplexities))
+
 def preProcess(data):
     stop = stopwords.words('english')
-    stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href', 'deleted', 'just', 'like', 'im', 'dont', 'wa', 'u', 'ha', 'get', 'would', 'thats', 'thing', 'even', 'one', 'well', 'see', 'got', 'could', 'should', 'also', 'go', 'make', 'sure'])
+    stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href', 'deleted', 'just', 'like', 'im', 'dont', 'wa', 'u', 'ha', 'get', 'would', 'thats', 'thing', 'even', 'one', 'well', 'see', 'got', 'could', 'should', 'also', 'go', 'make', 'sure', 'ive', 'think', 'time', 'good', 'uve', 'much'])
 
     tf_vectorizer = TfidfVectorizer(tokenizer=tokenize,
                                     max_df=.9, min_df=1,
-                                    #stop_words='english',
                                     stop_words=set(stop),
                                     binary=False,
                                     norm = None,
@@ -62,7 +125,7 @@ def preProcess(data):
     term_matrix = tf_vectorizer.fit_transform(data).tocsr()
     term_matrix = scale(term_matrix, with_mean=False, with_std=False, axis=0, copy=False)
     #term_matrix = MaxAbsScaler((0,1)).fit_transform(term_matrix)
-    print term_matrix
+    #print term_matrix
     return (term_matrix, tf_vectorizer.get_feature_names())
 
 def preProcessBaseline(data):
@@ -89,15 +152,13 @@ def fit_LDA(tf, tf_feature_names, n_samples, n_features, topics, name):
     return lda
 
 def explore_data(file):
-    #files = ['funny.json', '24hoursupport.json', 'todayilearned.json', 'politics', 'uspolitics.json']
-    files = ['politics.json']
+    #files = ['24hoursupport.json']
+    files = ['2010.json', '2011.json', '2012.json']
     datas = []
-    preprocessed = []
     subreddits = []
+    print "Loading Datasets"
     for file in files:
         # Format json data to be read by pandas
-
-        # Originally had open with rb. Why read as bytes? Does pandas prefer bytes?
         with open(file, 'r') as f:
             data = f.readlines()
 
@@ -108,48 +169,48 @@ def explore_data(file):
         # read in pandas
         data = pd.read_json(data_json_str)
         # set the index to be this and don't drop
-        data.set_index(keys=['subreddit'], drop=False, inplace=True)
-            
+        data.set_index(keys=['subreddit'], drop=False, inplace=True) 
         subreddits.append(data['subreddit'].unique().tolist())
 
         # Shuffle the data
         shuffled = data.iloc[np.random.permutation(len(data))]
         shuffled.reset_index(drop=True)
-        # Make training and holdout
         if (shuffled.empty == False):
             datas.append(shuffled)
 
-    
     res = list(set(subreddits[0]).intersection(*subreddits))
     subreddits = res
-    
-    print("Extracting tf features for LDA...")
+    baselineAvgModelPerplexities = {}
+    proposedAvgModelPerplexities = {}
     yearModels = []
     for data in datas:
+        print("Extracting proposed tf features for LDA...")
         models = {}
         data = data.query('@subreddits in subreddit')
         for subredditName in subreddits:
             subDF = data.loc[data.subreddit == subredditName]
             if(subDF.empty != True):
                 samples = [x for x in subDF['body']]
-                (termMatrix, vectorizer) = preProcess(samples)
-                # minus 1 because we want to use this as index
-                rowsIndex = termMatrix.shape[0] - 1
-                split = int(round(.7 * rowsIndex))
-                Train = termMatrix[:split]
-                Hold = termMatrix[split +1:]
-                if Train.shape[0] == 0 or Hold.shape[0] == 0:
-                    continue
-                model = fit_LDA(Train, vectorizer, termMatrix.shape[0], termMatrix.shape[1], 1, subredditName)
-                models[subredditName] = model
-                print model.perplexity(Hold)
-                print
-                preprocessed.append((termMatrix, vectorizer, subredditName))
+                (termMatrix, vocabulary) = preProcess(samples)
+                crossValidate(10, termMatrix, vocabulary, subredditName, proposedAvgModelPerplexities)
         print "-----------------------------------------------"
+
+    for data in datas:
+        print("Extracting baseline tf features for LDA...")
+        models = {}
+        data = data.query('@subreddits in subreddit')
+        for subredditName in subreddits:
+            subDF = data.loc[data.subreddit == subredditName]
+            if(subDF.empty != True):
+                samples = [x for x in subDF['body']]
+                (termMatrix, vocabulary) = preProcessBaseline(samples)
+                crossValidate(10, termMatrix, vocabulary, subredditName, baselineAvgModelPerplexities)
+        print "-----------------------------------------------"
+    plotPerplexities(baselineAvgModelPerplexities, proposedAvgModelPerplexities)
 
 results = {}
 explore_data('2016-08-15000.json')
-print(results)
+#print(results)
 
 
 # Remove Stop words
