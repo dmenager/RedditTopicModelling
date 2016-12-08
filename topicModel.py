@@ -41,8 +41,20 @@ def plotWordDistribution(model, feature_names, n_top_words, layout, subreddit,  
         #ax.set_yticks(size='large')
         ax.set_xticks(keymaps)
         ax.set_xticklabels(keys)
+        # Pad margins so that markers don't get clipped by the axes
+        #ax.set_margins(0.2)
     return plt
 def plotPerplexities(m1, m2, plts):
+    '''
+    year = 0
+    if y == 0:
+        year = 2010
+    elif y == 1:
+        year = 2011
+    elif y == 2:
+        year == 2012
+
+    '''
     xaxis = np.arange(len(m1.keys()))
     y_base_m = []
     y_base_d = []
@@ -59,7 +71,7 @@ def plotPerplexities(m1, m2, plts):
     fig = plt.figure()
     fig.canvas.set_window_title('Model Perplexities')
     plt.subplot(2,1,1)
-    plt.errorbar(xaxis, y_base_m, y_base_d)
+    plt.errorbar(xaxis, y_base_m, y_base_d, lw=3)
     plt.title("Average Perplexity Score for Baseline", fontsize=35)
     plt.xlabel("Subreddits", fontsize=20)
     plt.ylabel("Perplexity", fontsize=20)
@@ -67,7 +79,7 @@ def plotPerplexities(m1, m2, plts):
     plt.xticks(xaxis, m1.keys(), fontsize=20)
 
     plt.subplot(2,1,2)
-    plt.errorbar(xaxis,y_prop_m, y_prop_d)
+    plt.errorbar(xaxis,y_prop_m, y_prop_d, lw=3)
     plt.title("Average Perplexity Score for Tuned Model", fontsize=35)
     plt.xlabel("Subreddits", fontsize=20)
     plt.ylabel("Perplexity", fontsize=20)
@@ -97,7 +109,7 @@ def tokenize(text):
     #stems = stem_tokens(tokens, stemmer)
     #return stems
 
-def crossValidate(folds, terms, vocabulary, subredditName, avgPerplexities, flag, plts):
+def crossValidate(folds, terms, vocabulary, subredditName, avgPerplexities, flag, plts, y):
     print "Performing",
     print folds,
     print "fold cross validation."
@@ -110,11 +122,19 @@ def crossValidate(folds, terms, vocabulary, subredditName, avgPerplexities, flag
     terms = csr_matrix(terms)
     layout = [5,2,1]
     fig = plt.figure()
+
+    year = 0
+    if y == 0:
+        year = 2010
+    elif y == 1:
+        year = 2011
+    elif y == 2:
+        year = 2012
     
     if flag == 0:
-        fig.canvas.set_window_title('Word Distributions for %s on baseline' % subredditName)
+        fig.canvas.set_window_title('Word Distributions for %s on baseline for %d' % (subredditName, year))
     elif flag == 1:
-        fig.canvas.set_window_title('Word Distributions for %s on proposed' % subredditName)
+        fig.canvas.set_window_title('Word Distributions for %s on proposed for %d' % (subredditName, year))
 
     for i, Hold in enumerate(termsList):
         if i == 10:
@@ -161,7 +181,7 @@ def crossValidate(folds, terms, vocabulary, subredditName, avgPerplexities, flag
 
 def preProcess(data):
     stop = stopwords.words('english')
-    stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href', 'deleted', 'just', 'like', 'im', 'dont', 'wa', 'u', 'ha', 'get', 'would', 'thats', 'thing', 'even', 'one', 'well', 'see', 'got', 'could', 'should', 'also', 'go', 'make', 'sure', 'ive', 'think', 'time', 'good', 'uve', 'much'])
+    stop.extend(['www', 'http', 'https', 'com', 'net', 'org', 'edu', '://', 'jpg', 'png', 'gif', 'href', 'deleted', 'just', 'like', 'im', 'dont', 'wa', 'u', 'ha', 'get', 'would', 'thats', 'thing', 'even', 'one', 'well', 'see', 'got', 'could', 'should', 'also', 'go', 'make', 'sure', 'ive', 'think', 'time', 'good', 'uve', 'much', 'gt', 'way', 'doe', 'really', 'say', 'youre'])
 
     tf_vectorizer = TfidfVectorizer(tokenizer=tokenize,
                                     max_df=.9, min_df=1,
@@ -204,7 +224,7 @@ def fit_LDA(tf, tf_feature_names, n_samples, n_features, topics, name):
 
 def explore_data(file):
     #files = ['24hoursupport.json']
-    files = ['2010.json', '2011.json', '2012.json']
+    files = ['2010-small.json', '2011-small.json', '2012-small.json']
     datas = []
     subreddits = []
     print "Loading Datasets"
@@ -235,7 +255,7 @@ def explore_data(file):
     proposedAvgModelPerplexities = {}
     yearModels = []
     plts = []
-    for data in datas:
+    for year, data in enumerate(datas):
         print("Extracting proposed tf features for LDA...")
         models = {}
         data = data.query('@subreddits in subreddit')
@@ -244,10 +264,10 @@ def explore_data(file):
             if(subDF.empty != True):
                 samples = [x for x in subDF['body']]
                 (termMatrix, vocabulary) = preProcess(samples)
-                crossValidate(10, termMatrix, vocabulary, subredditName, proposedAvgModelPerplexities, 1, plts)
+                crossValidate(10, termMatrix, vocabulary, subredditName, proposedAvgModelPerplexities, 1, plts, year)
         print "-----------------------------------------------"
 
-    for data in datas:
+    for year, data in enumerate(datas):
         print("Extracting baseline tf features for LDA...")
         models = {}
         data = data.query('@subreddits in subreddit')
@@ -256,13 +276,10 @@ def explore_data(file):
             if(subDF.empty != True):
                 samples = [x for x in subDF['body']]
                 (termMatrix, vocabulary) = preProcessBaseline(samples)
-                crossValidate(10, termMatrix, vocabulary, subredditName, baselineAvgModelPerplexities, 0, plts)
+                crossValidate(10, termMatrix, vocabulary, subredditName, baselineAvgModelPerplexities, 0, plts, year)
         print "-----------------------------------------------"
     plotPerplexities(baselineAvgModelPerplexities, proposedAvgModelPerplexities, plts)
 
-    for i, plt in enumerate(plts):
-        print i 
-        plt.show()
     plt.show()
 
 results = {}
